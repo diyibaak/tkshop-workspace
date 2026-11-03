@@ -7,6 +7,23 @@
 
   var KEY = 'tkshop.db.v1';
   var SESSION_USER = 'Boss';
+  var AUTH_KEY = 'tkshop.auth.v1';
+  var SESSION_KEY = 'tkshop.session.v1';
+
+  /* 两个账号：boss=工作账户，root=管理后台账户 */
+  var DEFAULT_ACCOUNTS = [
+    { user: 'boss', name: 'Boss', role: 'user', pass: 'tkshop2026' },
+    { user: 'root', name: 'root', role: 'admin', pass: 'root123' }
+  ];
+
+  function loadAccounts() {
+    var raw = rawGet(AUTH_KEY);
+    if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+    var def = DEFAULT_ACCOUNTS.map(function (a) { return Object.assign({}, a); });
+    rawSet(AUTH_KEY, JSON.stringify(def));
+    return def;
+  }
+  function saveAccounts(list) { rawSet(AUTH_KEY, JSON.stringify(list)); }
 
   function uid(prefix) {
     return (prefix || 'x') + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
@@ -366,11 +383,11 @@
     log: function (action, target) {
       var d = load();
       d.logs = d.logs || [];
-      d.logs.unshift({ id: uid('l'), time: now(), user: SESSION_USER, action: action, target: target || '' });
+      d.logs.unshift({ id: uid('l'), time: now(), user: Store.user(), action: action, target: target || '' });
       if (d.logs.length > 400) d.logs.length = 400;
       persist();
     },
-    user: function () { return SESSION_USER; },
+    user: function () { var s = Store.session(); return (s && s.name) || SESSION_USER; },
     reset: function () { cache = seed(); persist(); },
     exportJSON: function () { return JSON.stringify(load(), null, 2); },
     importJSON: function (text) {
@@ -384,7 +401,40 @@
       var v = rawGet(KEY) || '';
       return v.length;
     },
-    storageOK: function () { load(); return storageOK; }
+    storageOK: function () { load(); return storageOK; },
+
+    /* ---------------- 登录 / 账号 ---------------- */
+    session: function () {
+      var raw = rawGet(SESSION_KEY);
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch (e) { return null; }
+    },
+    isAdmin: function () { var s = Store.session(); return !!(s && s.role === 'admin'); },
+    login: function (u, p) {
+      var list = loadAccounts();
+      var acc = list.filter(function (a) { return a.user === u && a.pass === p; })[0];
+      if (!acc) return { ok: false };
+      var sess = { user: acc.user, name: acc.name, role: acc.role, at: now() };
+      rawSet(SESSION_KEY, JSON.stringify(sess));
+      Store.log('登录系统', acc.user + (acc.role === 'admin' ? '（管理后台）' : '（工作账户）'));
+      return { ok: true, role: acc.role, name: acc.name };
+    },
+    logout: function () {
+      try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+      rawSet(SESSION_KEY, ''); // 兼容“禁用 localStorage”时的内存兜底，确保会话被清空
+    },
+    authAccounts: function () {
+      return loadAccounts().map(function (a) { var c = Object.assign({}, a); delete c.pass; return c; });
+    },
+    changePassword: function (user, np) {
+      var list = loadAccounts();
+      var acc = list.filter(function (a) { return a.user === user; })[0];
+      if (!acc) return false;
+      acc.pass = np;
+      saveAccounts(list);
+      Store.log('修改密码', user);
+      return true;
+    }
   };
 
   /* ---------------- 业务计算 ---------------- */

@@ -517,6 +517,58 @@
     ], params);
   }
 
+  /* ============================================================
+     管理后台（仅 root）
+     ============================================================ */
+  function adminAccounts() {
+    var list = Store.authAccounts();
+    var root = div('card card-pad', '');
+    var html = '<div class="cell-main">系统账号（' + list.length + '）</div>' +
+      '<div class="cell-sub" style="margin-top:2px">root 为管理后台账户，boss 为工作账户。密码仅保存在本机，可在此修改。</div>' +
+      '<div class="admin-acc-list">';
+    list.forEach(function (a) {
+      var isAdmin = a.role === 'admin';
+      html += '<div class="admin-acc">' +
+        '<div class="admin-acc-info"><div class="cell-main">' + esc(a.name) +
+          ' <span class="tag ' + (isAdmin ? 'tag-violet' : 'tag-sky') + '">' + (isAdmin ? '管理员' : '工作') + '</span></div>' +
+          '<div class="cell-sub" style="margin-top:2px">用户名：' + esc(a.user) + '</div></div>' +
+        '<button class="btn btn-sm" data-chg="' + esc(a.user) + '">修改密码</button>' +
+        '</div>';
+    });
+    html += '</div>';
+    root.innerHTML = html;
+    root.querySelectorAll('[data-chg]').forEach(function (btn) {
+      btn.onclick = function () {
+        var u = btn.getAttribute('data-chg');
+        UI.openModal({
+          title: '修改密码 · ' + u,
+          body: '<div class="field"><label>新密码</label><input class="input" id="np" type="text" placeholder="至少 4 位"></div>',
+          buttons: [
+            { label: '取消' },
+            {
+              label: '保存', primary: true, onClick: function (w) {
+                var v = (w.querySelector('#np').value || '').trim();
+                if (v.length < 4) { UI.toast('密码至少 4 位', 'err'); return false; }
+                Store.changePassword(u, v);
+                UI.toast('已更新 ' + u + ' 的密码');
+              }
+            }
+          ]
+        });
+      };
+    });
+    return root;
+  }
+
+  function adminPage(params) {
+    return shell([
+      { label: '账号管理', build: adminAccounts },
+      { label: '团队成员', build: membersTable },
+      { label: '操作日志', build: logsTable },
+      { label: '数据管理', build: dataPanel }
+    ], params);
+  }
+
   /* ---------------- 路由表 ---------------- */
   PAGES.dashboard = { title: '', render: dashboard };
   PAGES.selection = { title: '选品', sub: '三项打分：需求 40 / 可拍 35 / 利润 25', render: selectionPage };
@@ -524,6 +576,7 @@
   PAGES.content = { title: '内容', sub: '脚本 · 对标 · 模板 · 拍摄 · 分镜 · 视频', render: contentPage };
   PAGES.creators = { title: '达人', sub: '达人 · 账号 · 广告', render: creatorsPage };
   PAGES.settings = { title: '设置', sub: '数据 · 团队 · 操作记录', render: settingsPage };
+  PAGES.admin = { title: '管理后台', sub: '账号 · 团队 · 日志 · 数据', render: adminPage };
 
   /* 旧链接兜底：迁到新入口 */
   PAGES.stock = PAGES.selection;
